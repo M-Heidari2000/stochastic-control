@@ -37,6 +37,7 @@ class TransitionModel(nn.Module):
         state_dim: int,
         action_dim: int,
         hidden_dim: int,
+        min_std: float=1e-4,
     ):
         super().__init__()
 
@@ -50,10 +51,12 @@ class TransitionModel(nn.Module):
         self.mean_head = nn.Linear(hidden_dim, state_dim)
         self.log_std_head = nn.Linear(hidden_dim, state_dim)
 
+        self._min_std = min_std
+
     def forward(self, prev_state, prev_action):
         hidden = self.mlp_layers(
             torch.cat([prev_state, prev_action], dim=1)
         )
         mean = self.mean_head(hidden)
         log_std = self.log_std_head(hidden)
-        return Normal(mean, log_std.exp())
+        return Normal(mean, log_std.exp() + self._min_std)
