@@ -59,4 +59,56 @@ class TransitionModel(nn.Module):
         )
         mean = self.mean_head(hidden)
         log_std = self.log_std_head(hidden)
-        return Normal(mean, log_std.exp() + self._min_std)
+        prior_dist = Normal(mean, log_std.exp() + self._min_std)
+        return prior_dist
+    
+
+class Posterior(nn.Module):
+    """
+        q(s_t | o1:t, a1:t-1)
+    """
+
+    def __init__(
+        self,
+        observation_dim: int,
+        action_dim: int,
+        state_dim: int,
+        rnn_hidden_dim: int,
+        rnn_input_dim: int,
+        min_std: float=1e-4,
+    ):
+        super().__init__()
+
+        # RNN hidden at time t summarizes o1:t-1, a1:t-2
+        self.rnn = nn.GRUCell(
+            input_size=rnn_input_dim,
+            hidden_size=rnn_hidden_dim,
+        )
+
+        self.fc_obs_action = nn.Sequential(
+            nn.Linear(observation_dim + action_dim, rnn_input_dim),
+            nn.ReLU(),
+        )
+
+        self.posterior_mean_head = nn.Linear(rnn_hidden_dim, state_dim)
+        self.posterior_log_std_head = nn.Linear(rnn_hidden_dim, state_dim)
+
+        self._min_std = min_std
+
+    def forward(
+        self,
+        prev_rnn_hidden,
+        action,
+        observation,
+    ):
+        rnn_input = self.fc_obs_action(
+            torch.cat([observation, action], dim=1)
+        )
+        rnn_hidden = self.rnn(rnn_input, prev_rnn_hidden)
+
+        posterior_mean = self.posterior_mean_head(rnn_hidden)
+        posterior_log_std = self.posterior_log_std_head(rnn_hidden)
+
+        posterior_dist = Normal(posterior_mean, posterior_log_std.exp() + self._min_std)
+
+        return posterior_dist
