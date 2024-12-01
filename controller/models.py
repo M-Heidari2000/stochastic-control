@@ -63,7 +63,7 @@ class TransitionModel(nn.Module):
         return prior_dist
     
 
-class Posterior(nn.Module):
+class PosteriorModel(nn.Module):
     """
         q(s_t | o1:t, a1:t-1)
     """
@@ -93,16 +93,20 @@ class Posterior(nn.Module):
         self.posterior_mean_head = nn.Linear(rnn_hidden_dim, state_dim)
         self.posterior_log_std_head = nn.Linear(rnn_hidden_dim, state_dim)
 
+        self.rnn_hidden_dim = rnn_hidden_dim
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.rnn_input_dim = rnn_input_dim
         self._min_std = min_std
 
     def forward(
         self,
         prev_rnn_hidden,
-        action,
+        prev_action,
         observation,
     ):
         rnn_input = self.fc_obs_action(
-            torch.cat([observation, action], dim=1)
+            torch.cat([observation, prev_action], dim=1)
         )
         rnn_hidden = self.rnn(rnn_input, prev_rnn_hidden)
 
@@ -111,4 +115,4 @@ class Posterior(nn.Module):
 
         posterior_dist = Normal(posterior_mean, posterior_log_std.exp() + self._min_std)
 
-        return posterior_dist
+        return rnn_hidden, posterior_dist
