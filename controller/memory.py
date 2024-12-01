@@ -15,7 +15,6 @@ class ReplayBuffer:
 
         self.observations = np.zeros((capacity, observation_dim), dtype=np.float32)
         self.actions = np.zeros((capacity, action_dim), dtype=np.float32)
-        self.rewards = np.zeros((capacity, 1), dtype=np.float32)
         self.done = np.zeros((capacity, 1), dtype=bool)
 
         self.index = 0
@@ -28,7 +27,6 @@ class ReplayBuffer:
         self,
         observation,
         action,
-        reward,
         done,
     ):
         """
@@ -36,7 +34,6 @@ class ReplayBuffer:
         """
         self.observations[self.index] = observation
         self.actions[self.index] = action
-        self.rewards[self.index] = reward
         self.done[self.index] = done
 
         self.index = (self.index + 1) % self.capacity
@@ -66,11 +63,8 @@ class ReplayBuffer:
         sampled_actions = self.actions[sampled_ranges].reshape(
             batch_size, chunk_length, self.actions.shape[1]
         )
-        sampled_rewards = self.rewards[sampled_ranges].reshape(
-            batch_size, chunk_length, 1
-        )
         sampled_done = self.done[sampled_ranges].reshape(
             batch_size, chunk_length, 1
         )
 
-        return sampled_observations, sampled_actions, sampled_rewards, sampled_done
+        return sampled_observations, sampled_actions, sampled_done

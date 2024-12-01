@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from typing import Optional
 from torch.distributions import Normal
 
 
@@ -11,10 +12,12 @@ class ObservationModel(nn.Module):
     def __init__(
         self,
         state_dim: int,
-        hidden_dim: int,
         observation_dim: int,
+        hidden_dim: Optional[int]=None,
     ):
         super().__init__()
+
+        hidden_dim = hidden_dim if hidden_dim is not None else state_dim * 2
         
         self.mlp_layers = nn.Sequential(
             nn.Linear(state_dim, hidden_dim),
@@ -36,10 +39,14 @@ class TransitionModel(nn.Module):
         self,
         state_dim: int,
         action_dim: int,
-        hidden_dim: int,
+        hidden_dim: Optional[int]=None,
         min_std: float=1e-4,
     ):
         super().__init__()
+
+        hidden_dim = (
+            hidden_dim if hidden_dim is not None else 2*(state_dim + action_dim)
+        )
 
         self.mlp_layers = nn.Sequential(
             nn.Linear(state_dim + action_dim, hidden_dim),

@@ -10,6 +10,8 @@ class TrainConfig:
     action_repeat: int = 1
     state_dim: int = 30
     rnn_hidden_dim: int = 200
+    rnn_input_dim: int = 200
+    min_std: float = 1e-2
     buffer_capacity: int = 1000000
     all_episodes: int = 1000
     seed_episodes: int = 5
@@ -23,7 +25,7 @@ class TrainConfig:
     planning_horizon: int = 12
     num_iterations: int = 10
     num_candidates: int = 1000
-    num_top_candidates: int = 100
+    num_elites: int = 100
     action_noise_var: float = 0.3
 
     dict = asdict

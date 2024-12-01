@@ -89,10 +89,16 @@ class CEMAgent:
                 action_dist.loc = mean
                 action_dist.scale = std
             
-            #return only mean of the first action (MPC)
+            # return only mean of the first action (MPC)
             action = mean[0]
 
-        return action.cpu().numpy()
+            # predicted reward for this action
+            reward = self.reward_function(
+                state=state_posterior.mean,
+                action=action,
+            )
+
+        return action.cpu().numpy(), reward.cpu().numpy()
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
