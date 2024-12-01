@@ -17,12 +17,13 @@ from .wrappers import RepeatActionWrapper
 from .configs import TrainConfig
 from .models import (
     ObservationModel,
+    RewardModel,
     TransitionModel,
     PosteriorModel,
 )
 
 
-def train(env: gym.Env, reward_function, config: TrainConfig):
+def train(env: gym.Env, config: TrainConfig):
 
     # prepare logging
     log_dir = Path(config.log_dir) / datetime.now().strftime("%Y%m%d_%H%M")
@@ -56,6 +57,10 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
         observation_dim=env.observation_space.shape[0],
     ).to(device)
 
+    reward_model = RewardModel(
+        state_dim=config.state_dim,
+    ).to(device)
+
     transition_model = TransitionModel(
         state_dim=config.state_dim,
         action_dim=env.action_space.shape[0],
@@ -73,6 +78,7 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
 
     all_params = (
         list(observation_model.parameters()) +
+        list(reward_model.parameters()) +
         list(transition_model.parameters()) +
         list(posterior_model.parameters())
     )
@@ -80,11 +86,11 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
     cem_agent = CEMAgent(
         transition_model=transition_model,
         posterior_model=posterior_model,
+        reward_model=reward_model,
         planning_horizon=config.planning_horizon,
         num_iterations=config.num_iterations,
         num_candidates=config.num_candidates,
         num_elites=config.num_elites,
-        reward_function=reward_function,
     )
 
     optimizer = torch.optim.Adam(all_params, lr=config.lr, eps=config.eps)
@@ -95,9 +101,9 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
         done = False
         while not done:
             action = env.action_space.sample()
-            next_obs, _, terminated, truncated, _ = env.step(action)
+            next_obs, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated
-            replay_buffer.push(obs, action, done)
+            replay_buffer.push(obs, action, reward, done)
             obs = next_obs
 
     # main training loop
@@ -111,18 +117,19 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
         cem_agent.reset()
         prev_action = None
         while not done:
-            action, reward = cem_agent(obs=obs, prev_action=prev_action)
-            total_reward += reward
+            action = cem_agent(obs=obs, prev_action=prev_action)
             action += np.random.normal(
                 0,
                 np.sqrt(config.action_noise_var),
                 env.action_space.shape[0],
             )
-            prev_action = action
-            next_obs, _, terminated, truncated, _ = env.step(action)
+            next_obs, reward, terminated, truncated, _ = env.step(action)
+            total_reward += reward
             done = terminated or truncated
-            replay_buffer.push(obs, action, done)
+            replay_buffer.push(obs, action, reward, done)
             obs = next_obs
+            prev_action = action
+
 
         writer.add_scalar('total reward at train', total_reward, episode)
         print('episode [%4d/%4d] is collected. Total reward is %f' %
@@ -132,7 +139,7 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
         # update model parameters
         start = time.time()
         for update_step in range(config.collect_interval):
-            observations, actions, _ = replay_buffer.sample(
+            observations, actions, rewards, _ = replay_buffer.sample(
                 batch_size=config.batch_size,
                 chunk_length=config.chunk_length,
             )
@@ -141,7 +148,9 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
             observations = einops.rearrange(observations, 'b l o -> l b o')
             actions = torch.as_tensor(actions, device=device)
             actions = einops.rearrange(actions, 'b l a -> l b a')
-
+            rewards = torch.as_tensor(rewards, device=device)
+            rewards = einops.rearrange(rewards, 'b l r -> l b r')
+            
             # prepare Tensor to maintain states sequence and rnn hidden sequence
             posterior_samples = torch.zeros(
                 (config.chunk_length, config.batch_size, config.state_dim),
@@ -193,7 +202,12 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
                 posterior_samples[t] = posterior_sample
 
             flatten_posterior_samples = posterior_samples.reshape(-1, config.state_dim)
+            
             recon_observations = observation_model(
+                flatten_posterior_samples,
+            ).reshape(config.chunk_length, config.batch_size, env.observation_space.shape[0])
+
+            recon_rewards = reward_model(
                 flatten_posterior_samples,
             ).reshape(config.chunk_length, config.batch_size, env.observation_space.shape[0])
 
@@ -203,21 +217,28 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
                 reduction='none'
             ).mean([0, 1]).sum()
 
-            loss = config.kl_beta * total_kl_loss + obs_loss
+            reward_loss = 0.5 * mse_loss(
+                recon_rewards,
+                rewards,
+                reduction='none'
+            ).mean([0, 1]).sum()
+
+            loss = config.kl_beta * total_kl_loss + obs_loss + reward_loss
             optimizer.zero_grad()
             loss.backward()
             clip_grad_norm_(all_params, config.clip_grad_norm)
             optimizer.step()
 
             # print losses and add tensorboard
-            print('update_step: %3d loss: %.5f, kl_loss: %.5f, obs_loss: %.5f'
+            print('update_step: %3d loss: %.5f, kl_loss: %.5f, obs_loss: %.5f, reward_loss: %.5f'
                   % (update_step+1,
-                     loss.item(), total_kl_loss.item(), obs_loss.item()))
+                     loss.item(), total_kl_loss.item(), obs_loss.item(), reward_loss.item()))
             
             total_update_step = episode * config.collect_interval + update_step
             writer.add_scalar('overall loss', loss.item(), total_update_step)
             writer.add_scalar('kl loss', total_kl_loss.item(), total_update_step)
             writer.add_scalar('obs loss', obs_loss.item(), total_update_step)
+            writer.add_scalar('reward loss', reward_loss.item(), total_update_step)
         
         print('elasped time for update: %.2fs' % (time.time() - start))
 
@@ -229,11 +250,11 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
             cem_agent.reset()
             prev_action = None
             while not done:
-                action, reward = cem_agent(obs=obs, prev_action=prev_action)
+                action = cem_agent(obs=obs, prev_action=prev_action)
+                next_obs, reward, terminated, truncated, _ = env.step(action)
                 total_reward += reward
-                prev_action = action
-                next_obs, _, terminated, truncated, _ = env.step(action)
                 obs = next_obs
+                prev_action = action
                 done = terminated or truncated
 
             writer.add_scalar('total reward at test', total_reward, episode)
@@ -243,6 +264,7 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
 
      # save learned model parameters
     torch.save(observation_model.state_dict(), log_dir / "obs_model.pth")
+    torch.save(reward_model.state_dict(), log_dir / "reward_model.pth")
     torch.save(transition_model.state_dict(), log_dir / "transition_model.pth")
     torch.save(posterior_model.state_dict(), log_dir / "posterior_model.pth")
     writer.close()
