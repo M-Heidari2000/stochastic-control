@@ -95,7 +95,7 @@ class CEMAgent:
             # predicted reward for this action
             reward = self.reward_function(
                 state=state_posterior.mean,
-                action=action,
+                action=action.unsqueeze(0),
             )
 
         return action.cpu().numpy(), reward.cpu().numpy()

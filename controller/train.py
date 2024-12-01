@@ -65,6 +65,7 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
     posterior_model = PosteriorModel(
         observation_dim=env.observation_space.shape[0],
         action_dim=env.action_space.shape[0],
+        state_dim=config.state_dim,
         rnn_hidden_dim=config.rnn_hidden_dim,
         rnn_input_dim=config.rnn_input_dim,
         min_std=config.min_std,
@@ -163,30 +164,33 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
                 torch.zeros((config.batch_size, config.state_dim), device=device),
                 torch.ones((config.batch_size, config.state_dim), device=device),
             )
-
             # kl divergence between prior and posterior
             kl_loss = kl_divergence(state_posterior, state_prior).sum(dim=1)
             total_kl_loss += kl_loss.clamp(min=config.free_nats).mean()
 
+            posterior_sample = state_posterior.rsample()
+
             rnn_hiddens[0] = rnn_hidden
-            posterior_samples[0] = state_posterior.rsample()
+            posterior_samples[0] = posterior_sample
 
             for t in range(1, config.chunk_length):
                 rnn_hidden, state_posterior = posterior_model(
-                    prev_rnn_hidden=rnn_hiddens[t-1],
+                    prev_rnn_hidden=rnn_hidden,
                     prev_action=actions[t-1],
                     observation=observations[t],
                 )
                 state_prior = transition_model(
-                    prev_state=posterior_samples[t-1],
+                    prev_state=posterior_sample,
                     prev_action=actions[t-1],
                 )
 
                 kl_loss = kl_divergence(state_posterior, state_prior).sum(dim=1)
                 total_kl_loss += kl_loss.clamp(min=config.free_nats).mean()
 
+                posterior_sample = state_posterior.rsample()
+
                 rnn_hiddens[t] = rnn_hidden
-                posterior_samples[t] = state_posterior.rsample()
+                posterior_samples[t] = posterior_sample
 
             flatten_posterior_samples = posterior_samples.reshape(-1, config.state_dim)
             recon_observations = observation_model(
@@ -199,7 +203,7 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
                 reduction='none'
             ).mean([0, 1]).sum()
 
-            loss = total_kl_loss + obs_loss
+            loss = config.kl_beta * total_kl_loss + obs_loss
             optimizer.zero_grad()
             loss.backward()
             clip_grad_norm_(all_params, config.clip_grad_norm)
@@ -208,11 +212,11 @@ def train(env: gym.Env, reward_function, config: TrainConfig):
             # print losses and add tensorboard
             print('update_step: %3d loss: %.5f, kl_loss: %.5f, obs_loss: %.5f'
                   % (update_step+1,
-                     loss.item(), kl_loss.item(), obs_loss.item()))
+                     loss.item(), total_kl_loss.item(), obs_loss.item()))
             
             total_update_step = episode * config.collect_interval + update_step
             writer.add_scalar('overall loss', loss.item(), total_update_step)
-            writer.add_scalar('kl loss', kl_loss.item(), total_update_step)
+            writer.add_scalar('kl loss', total_kl_loss.item(), total_update_step)
             writer.add_scalar('obs loss', obs_loss.item(), total_update_step)
         
         print('elasped time for update: %.2fs' % (time.time() - start))
