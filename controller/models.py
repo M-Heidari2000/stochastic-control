@@ -53,7 +53,6 @@ class RewardModel(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
-    
     def forward(self, state):
         return self.mlp_layers(state)
     

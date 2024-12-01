@@ -1,6 +1,5 @@
 import torch
 import einops
-from typing import Callable
 from torch.distributions import Normal
 
 
@@ -13,19 +12,19 @@ class CEMAgent:
         self,
         transition_model,
         posterior_model,
+        reward_model,
         planning_horizon: int,
         num_iterations: int,
         num_candidates: int,
         num_elites: int,
-        reward_function: Callable,
     ):
         self.transition_model = transition_model
         self.posterior_model = posterior_model
+        self.reward_model = reward_model
         self.num_iterations = num_iterations
         self.num_candidates = num_candidates
         self.num_elites = num_elites
         self.planning_horizon = planning_horizon
-        self.reward_function = reward_function
 
         self.device = next(posterior_model.parameters()).device
 
@@ -68,10 +67,7 @@ class CEMAgent:
 
                 # start generating trajectories starting from s_t using transition model
                 for t in range(self.planning_horizon):
-                    total_predicted_reward += self.reward_function(
-                        state=state,
-                        action=action_candidates[t],
-                    ).squeeze()
+                    total_predicted_reward += self.reward_model(state=state).squeeze()
                     # get next state from our prior (transition model)
                     next_state_prior = self.transition_model(
                         prev_state=state,
@@ -92,13 +88,7 @@ class CEMAgent:
             # return only mean of the first action (MPC)
             action = mean[0]
 
-            # predicted reward for this action
-            reward = self.reward_function(
-                state=state_posterior.mean,
-                action=action.unsqueeze(0),
-            )
-
-        return action.cpu().numpy(), reward.cpu().numpy()
+        return action.cpu().numpy()
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
