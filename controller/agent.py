@@ -30,7 +30,7 @@ class CEMAgent:
         self.device = next(posterior_model.parameters()).device
 
         # initialize rnn hidden to zero vector
-        self.rnn_hidden = torch.zeros(1, posterior_model.rnn_hidden_dim, device=self.device)
+        self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
 
     def __call__(self, obs, prev_action=None):
 
@@ -93,3 +93,6 @@ class CEMAgent:
             action = mean[0]
 
         return action.cpu().numpy()
+    
+    def reset(self):
+        self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
