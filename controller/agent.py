@@ -36,7 +36,7 @@ class CEMAgent:
 
         # convert o_t and a_{t-1} to a torch tensor and add a batch dimension
         obs = torch.as_tensor(obs, device=self.device).unsqueeze(0)
-        if prev_action:
+        if prev_action is not None:
             prev_action = torch.as_tensor(prev_action, device=self.device).unsqueeze(0)
         else:
             prev_action = torch.zeros(self.posterior_model.action_dim, device=self.device).unsqueeze(0)
@@ -92,4 +92,4 @@ class CEMAgent:
             #return only mean of the first action (MPC)
             action = mean[0]
 
-        return action
+        return action.cpu().numpy()
