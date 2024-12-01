@@ -66,7 +66,7 @@ class TransitionModel(nn.Module):
         state_dim: int,
         action_dim: int,
         hidden_dim: Optional[int]=None,
-        min_std: float=1e-4,
+        min_std: float=1e-2,
     ):
         super().__init__()
 
@@ -82,7 +82,10 @@ class TransitionModel(nn.Module):
         )
 
         self.mean_head = nn.Linear(hidden_dim, state_dim)
-        self.log_std_head = nn.Linear(hidden_dim, state_dim)
+        self.std_head = nn.Sequential(
+            nn.Linear(hidden_dim, state_dim),
+            nn.Softplus(),
+        )
 
         self._min_std = min_std
 
@@ -91,8 +94,8 @@ class TransitionModel(nn.Module):
             torch.cat([prev_state, prev_action], dim=1)
         )
         mean = self.mean_head(hidden)
-        log_std = self.log_std_head(hidden)
-        prior_dist = Normal(mean, log_std.exp() + self._min_std)
+        std = self.std_head(hidden) + self._min_std
+        prior_dist = Normal(mean, std)
         return prior_dist
     
 
@@ -108,7 +111,7 @@ class PosteriorModel(nn.Module):
         state_dim: int,
         rnn_hidden_dim: int,
         rnn_input_dim: int,
-        min_std: float=1e-4,
+        min_std: float=1e-2,
     ):
         super().__init__()
 
@@ -124,7 +127,10 @@ class PosteriorModel(nn.Module):
         )
 
         self.posterior_mean_head = nn.Linear(rnn_hidden_dim, state_dim)
-        self.posterior_log_std_head = nn.Linear(rnn_hidden_dim, state_dim)
+        self.posterior_std_head = nn.Sequential(
+            nn.Linear(rnn_hidden_dim, state_dim),
+            nn.Softplus(),
+        )
 
         self.rnn_hidden_dim = rnn_hidden_dim
         self.state_dim = state_dim
@@ -144,8 +150,8 @@ class PosteriorModel(nn.Module):
         rnn_hidden = self.rnn(rnn_input, prev_rnn_hidden)
 
         posterior_mean = self.posterior_mean_head(rnn_hidden)
-        posterior_log_std = self.posterior_log_std_head(rnn_hidden)
+        posterior_std = self.posterior_std_head(rnn_hidden) + self._min_std
 
-        posterior_dist = Normal(posterior_mean, posterior_log_std.exp() + self._min_std)
+        posterior_dist = Normal(posterior_mean, posterior_std)
 
         return rnn_hidden, posterior_dist
