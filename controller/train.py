@@ -209,7 +209,7 @@ def train(env: gym.Env, config: TrainConfig):
 
             recon_rewards = reward_model(
                 flatten_posterior_samples,
-            ).reshape(config.chunk_length, config.batch_size, env.observation_space.shape[0])
+            ).reshape(config.chunk_length, config.batch_size, 1)
 
             obs_loss = 0.5 * mse_loss(
                 recon_observations,
