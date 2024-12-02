@@ -17,8 +17,8 @@ class SwissRoll(gym.Env):
         R,
         Ns=None,
         No=None,
-        action_lo: float=-1.0,
-        action_hi: float=1.0,
+        action_lo: float=-0.1,
+        action_hi: float=0.1,
         render_mode: str=None,
         horizon: int= 1000,
     ):
@@ -54,8 +54,8 @@ class SwissRoll(gym.Env):
         self.horizon = horizon
 
         self.state_space = spaces.Box(
-            low=np.array([0.0, -1.0]),
-            high=np.array([4*np.pi, 1.0]),
+            low=np.array([0, -4.0]),
+            high=np.array([4*np.pi, 4.0]),
             shape=(2, ),
             dtype=np.float32,
         )
@@ -74,12 +74,17 @@ class SwissRoll(gym.Env):
             dtype=np.float32,
         )
 
+    def manifold(self, s):
+        assert s.shape[0] == 2
+        e = np.stack([
+            s[0, :] * np.cos(s[0, :]) / 2,
+            s[1, :],
+            s[0, :] * np.sin(s[0, :]) / 2,
+        ], axis=0)
+        return e
+
     def _get_obs(self):
-        obs = np.array([
-            self._state[0, 0] * np.cos(self._state[0, 0]) / 2,
-            self._state[1, 0],
-            self._state[0, 0] * np.sin(self._state[0, 0]) / 2,
-        ]).reshape(-1, 1)
+        obs = self.manifold(self._state)
         if self.No is not None:
             no = self.np_random.multivariate_normal(
                 mean=np.zeros(self.observation_space.shape),
@@ -96,7 +101,14 @@ class SwissRoll(gym.Env):
     ):
         
         super().reset(seed=seed)
-        self._state = self.state_space.sample().reshape(-1, 1)
+        options = options or {}
+        initial_state = options.get("initial_state")
+        
+        if initial_state is not None:
+            assert initial_state.shape == self.state_space.shape
+            self._state = initial_state.astype(np.float32).reshape(-1, 1)
+        else:
+            self._state = self.state_space.sample().reshape(-1, 1)
         
         self._step = 1
         observation = self._get_obs().flatten()
