@@ -1,9 +1,9 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
-from typing import Callable
 
-class NonLinearSSM(gym.Env):
+
+class SwissRoll(gym.Env):
     metadata = {
         "render_modes": ["rgb_array"],
     }
@@ -13,13 +13,9 @@ class NonLinearSSM(gym.Env):
         A,
         b,
         B,
-        C,
-        f: Callable,
         Q,
         R,
-        Ni,
         Ns=None,
-        Nz=None,
         No=None,
         action_lo: float=-1.0,
         action_hi: float=1.0,
@@ -27,46 +23,29 @@ class NonLinearSSM(gym.Env):
         horizon: int= 1000,
     ):
         # Verify parameters' shapes
-        assert A.shape[0] == A.shape[1]
-        self.state_dim = A.shape[0]
+        assert A.shape == (2, 2)
         self.A = A.astype(np.float32)
 
-        assert b.shape[0] == self.state_dim
+        assert b.shape == (2, )
         # Convert to column vector
         self.b = b.astype(np.float32).reshape(-1, 1)
 
-        assert B.shape[0] == self.state_dim
+        assert B.shape[0] == 2
         self.action_dim = B.shape[1]
         self.B = B.astype(np.float32)
         
-        assert C.shape[1] == self.state_dim
-        self.intermediate_state_dim = C.shape[0]
-        self.C = C.astype(np.float32)
-        
-        dummy_input = np.zeros((self.intermediate_state_dim, 1))
-        dummy_output = f(dummy_input)
-        self.observation_dim = dummy_output.shape[0]
-        self.f = f
-
-        assert Q.shape == (self.state_dim, self.state_dim)
+        assert Q.shape == (2, 2)
         self.Q = Q.astype(np.float32)
         assert R.shape == (self.action_dim, self.action_dim)
         self.R = R.astype(np.float32)
 
-        assert Ni.shape == (self.state_dim, self.state_dim)
-        self.Ni = Ni.astype(np.float32)
-
         self.Ns = Ns
-        self.Nz = Nz
         self.No = No
         if Ns is not None:
-            assert Ns.shape == (self.state_dim, self.state_dim)
+            assert Ns.shape == (2, 2)
             self.Ns = Ns.astype(np.float32)
-        if Nz is not None:
-            assert Nz.shape == (self.intermediate_state_dim, self.intermediate_state_dim)
-            self.Nz = Nz.astype(np.float32)
         if No is not None:
-            assert No.shape == (self.observation_dim, self.observation_dim)
+            assert No.shape == (3, 3)
             self.No = No.astype(np.float32)
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -74,10 +53,10 @@ class NonLinearSSM(gym.Env):
 
         self.horizon = horizon
 
-        self.observation_space = spaces.Box(
-            low=-np.inf,
-            high=np.inf,
-            shape=(self.observation_dim, ),
+        self.state_space = spaces.Box(
+            low=np.array([0.0, -1.0]),
+            high=np.array([4*np.pi, 1.0]),
+            shape=(2, ),
             dtype=np.float32,
         )
 
@@ -88,19 +67,22 @@ class NonLinearSSM(gym.Env):
             dtype=np.float32,
         )
 
+        self.observation_space = spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(3, ),
+            dtype=np.float32,
+        )
+
     def _get_obs(self):
-        z = self.C @ self._state
-        if self.Nz is not None:
-            nz = self.np_random.multivariate_normal(
-                mean=np.zeros((self.intermediate_state_dim, )),
-                cov=self.Nz,
-            ).astype(np.float32).reshape(-1, 1)
-            z = z + nz
-            
-        obs = self.f(z)
+        obs = np.array([
+            self._state[0, 0] * np.cos(self._state[0, 0]) / 2,
+            self._state[1, 0],
+            self._state[0, 0] * np.sin(self._state[0, 0]) / 2,
+        ]).reshape(-1, 1)
         if self.No is not None:
             no = self.np_random.multivariate_normal(
-                mean=np.zeros((self.observation_dim, )),
+                mean=np.zeros(self.observation_space.shape),
                 cov=self.No,
             ).astype(np.float32).reshape(-1, 1)
             obs = obs + no
@@ -114,17 +96,7 @@ class NonLinearSSM(gym.Env):
     ):
         
         super().reset(seed=seed)
-        options = options or {}
-        initial_state = options.get("initial_state")
-
-        if initial_state is not None:
-            assert initial_state.shape == (self.state_dim, )
-            self._state = initial_state.astype(np.float32).reshape(-1, 1)
-        else:
-            self._state = self.np_random.multivariate_normal(
-                mean=np.zeros((self.state_dim, )),
-                cov=self.Ni,
-            ).astype(np.float32).reshape(-1, 1)
+        self._state = self.state_space.sample().reshape(-1, 1)
         
         self._step = 1
         observation = self._get_obs().flatten()
@@ -146,10 +118,17 @@ class NonLinearSSM(gym.Env):
         self._state = self.A @ self._state + self.b + self.B @ action
         if self.Ns is not None:
             ns = self.np_random.multivariate_normal(
-                mean=np.zeros((self.state_dim, )),
+                mean=np.zeros(self.state_space.shape),
                 cov=self.Ns,
             ).astype(np.float32).reshape(-1, 1)
             self._state = self._state + ns
+
+        self._state = np.clip(
+            a=self._state,
+            a_min=self.state_space.low.reshape(-1, 1),
+            a_max=self.state_space.high.reshape(-1, 1),
+        )
+        
         self._step += 1
         
         info = {"state": self._state.copy().flatten()}

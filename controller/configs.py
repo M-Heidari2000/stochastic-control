@@ -21,7 +21,7 @@ class TrainConfig:
     lr: float = 1e-3
     eps: float = 1e-5
     clip_grad_norm: int = 1000
-    free_nats: int = 3
+    free_nats: int = 0
     kl_beta: float = 1
     planning_horizon: int = 12
     num_iterations: int = 10
