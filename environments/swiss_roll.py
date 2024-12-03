@@ -74,6 +74,8 @@ class SwissRoll(gym.Env):
             dtype=np.float32,
         )
 
+        self.target = (0.5 * (self.state_space.low + self.state_space.high)).reshape(-1, 1)
+
     def manifold(self, s):
         assert s.shape[0] == 2
         e = np.stack([
@@ -124,7 +126,7 @@ class SwissRoll(gym.Env):
         action = action.astype(np.float32).reshape(-1, 1)
 
         # Calculate reward for current state and action
-        reward = -(self._state.T @ self.Q @ self._state) - (action.T @ self.R @ action)
+        reward = -((self._state - self.target).T @ self.Q @ (self._state - self.target)) - (action.T @ self.R @ action)
 
         # Calculate Next step
         self._state = self.A @ self._state + self.b + self.B @ action
