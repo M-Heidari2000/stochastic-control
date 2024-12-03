@@ -17,8 +17,8 @@ class SwissRoll(gym.Env):
         R,
         Ns=None,
         No=None,
-        action_lo: float=-0.1,
-        action_hi: float=0.1,
+        action_lo: float=-1.0,
+        action_hi: float=1.0,
         render_mode: str=None,
         horizon: int= 1000,
     ):
