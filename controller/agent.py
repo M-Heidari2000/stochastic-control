@@ -1,6 +1,6 @@
 import torch
 import einops
-from torch.distributions import Normal
+from torchrl.modules import TruncatedNormal
 
 
 class CEMAgent:
@@ -10,11 +10,10 @@ class CEMAgent:
 
     def __init__(
         self,
+        env,
         transition_model,
         posterior_model,
         reward_model,
-        action_low,
-        action_high,
         planning_horizon: int,
         num_iterations: int,
         num_candidates: int,
@@ -23,14 +22,15 @@ class CEMAgent:
         self.transition_model = transition_model
         self.posterior_model = posterior_model
         self.reward_model = reward_model
-        self.action_low = action_low
-        self.action_high = action_high
         self.num_iterations = num_iterations
         self.num_candidates = num_candidates
         self.num_elites = num_elites
         self.planning_horizon = planning_horizon
 
         self.device = next(posterior_model.parameters()).device
+
+        self.action_low = torch.as_tensor(env.action_space.low, device=self.device).unsqueeze(0)
+        self.action_high = torch.as_tensor(env.action_space.high, device=self.device).unsqueeze(0)
 
         # initialize rnn hidden to zero vector
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
@@ -54,7 +54,7 @@ class CEMAgent:
             )
 
             # initialize action distribution ~ N(0, I)
-            action_dist = Normal(
+            action_dist = TruncatedNormal(
                 0.5 * (self.action_high + self.action_low) + torch.zeros(
                     (self.planning_horizon, self.posterior_model.action_dim),
                     device=self.device
@@ -63,13 +63,15 @@ class CEMAgent:
                     (self.planning_horizon, self.posterior_model.action_dim),
                     device=self.device
                 ),
+                low=self.action_low,
+                high=self.action_high,
             )
 
             # iteratively improve action distribution with CEM
             for _ in range(self.num_iterations):
                 # sample action candidates
                 # reshape to (planning_horizon, num_candidates, action_dim) for parallel exploration
-                action_candidates = action_dist.sample([self.num_candidates]).clamp(self.action_low, self.action_high)
+                action_candidates = action_dist.sample([self.num_candidates])
                 action_candidates = einops.rearrange(action_candidates, "n h a -> h n a")
 
                 state = state_posterior.sample([self.num_candidates]).squeeze(-2)

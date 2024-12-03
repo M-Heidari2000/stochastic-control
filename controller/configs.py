@@ -1,6 +1,4 @@
 from dataclasses import dataclass, asdict
-from typing import Optional, Dict
-
 
 @dataclass
 class TrainConfig:
@@ -28,18 +26,5 @@ class TrainConfig:
     num_candidates: int = 1000
     num_elites: int = 100
     action_noise_var: float = 0.3
-
-    dict = asdict
-
-
-@dataclass
-class TestConfig:
-    model_dir: str
-    action_repeat: int = 4
-    episodes: int = 1
-    planning_horizon: int = 12
-    num_iterations: int = 10
-    num_candidates: int = 1000
-    num_top_candidates: int = 100
 
     dict = asdict

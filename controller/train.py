@@ -84,11 +84,10 @@ def train(env: gym.Env, config: TrainConfig):
     )
 
     cem_agent = CEMAgent(
+        env=env,
         transition_model=transition_model,
         posterior_model=posterior_model,
         reward_model=reward_model,
-        action_low=torch.as_tensor(env.action_space.low, device=device).unsqueeze(0),
-        action_high=torch.as_tensor(env.action_space.high, device=device).unsqueeze(0),
         planning_horizon=config.planning_horizon,
         num_iterations=config.num_iterations,
         num_candidates=config.num_candidates,
@@ -114,9 +113,9 @@ def train(env: gym.Env, config: TrainConfig):
         # collect experience
         start = time.time()
         obs, _ = env.reset()
+        cem_agent.reset()
         done = False
         total_reward = 0
-        cem_agent.reset()
         prev_action = None
         while not done:
             action = cem_agent(obs=obs, prev_action=prev_action)

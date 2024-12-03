@@ -55,7 +55,7 @@ class SwissRoll(gym.Env):
 
         self.state_space = spaces.Box(
             low=np.array([0, -4.0]),
-            high=np.array([4*np.pi, 4.0]),
+            high=np.array([2*np.pi, 4.0]),
             shape=(2, ),
             dtype=np.float32,
         )
