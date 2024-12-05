@@ -1,6 +1,6 @@
 import torch
 import einops
-from torchrl.modules import TruncatedNormal
+from torch.distributions import Normal
 
 
 class CEMAgent:
@@ -10,7 +10,6 @@ class CEMAgent:
 
     def __init__(
         self,
-        env,
         transition_model,
         posterior_model,
         reward_model,
@@ -28,9 +27,6 @@ class CEMAgent:
         self.planning_horizon = planning_horizon
 
         self.device = next(posterior_model.parameters()).device
-
-        self.action_low = torch.as_tensor(env.action_space.low, device=self.device).unsqueeze(0)
-        self.action_high = torch.as_tensor(env.action_space.high, device=self.device).unsqueeze(0)
 
         # initialize rnn hidden to zero vector
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
@@ -54,17 +50,9 @@ class CEMAgent:
             )
 
             # initialize action distribution ~ N(0, I)
-            action_dist = TruncatedNormal(
-                0.5 * (self.action_high + self.action_low) + torch.zeros(
-                    (self.planning_horizon, self.posterior_model.action_dim),
-                    device=self.device
-                ),
-                0.2 * (self.action_high - self.action_low) * torch.ones(
-                    (self.planning_horizon, self.posterior_model.action_dim),
-                    device=self.device
-                ),
-                low=self.action_low,
-                high=self.action_high,
+            action_dist = Normal(
+                torch.zeros((self.planning_horizon, self.posterior_model.action_dim), device=self.device),
+                torch.ones((self.planning_horizon, self.posterior_model.action_dim),device=self.device),
             )
 
             # iteratively improve action distribution with CEM
@@ -83,7 +71,7 @@ class CEMAgent:
                     # get next state from our prior (transition model)
                     next_state_prior = self.transition_model(
                         prev_state=state,
-                        prev_action=action_candidates[t],
+                        prev_action=torch.tanh(action_candidates[t]),
                     )
                     state = next_state_prior.sample()
 
@@ -98,7 +86,7 @@ class CEMAgent:
                 action_dist.scale = std
             
             # return only mean of the first action (MPC)
-            action = mean[0]
+            action = torch.tanh(mean[0])
 
         return action.cpu().numpy()
     

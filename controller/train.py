@@ -84,7 +84,6 @@ def train(env: gym.Env, config: TrainConfig):
     )
 
     cem_agent = CEMAgent(
-        env=env,
         transition_model=transition_model,
         posterior_model=posterior_model,
         reward_model=reward_model,
