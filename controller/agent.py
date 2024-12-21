@@ -86,9 +86,9 @@ class CEMAgent:
                 action_dist.scale = std
             
             # return only mean of the first action (MPC)
-            action = torch.tanh(mean[0])
+            actions = torch.tanh(mean)
 
-        return action.cpu().numpy()
+        return actions.cpu().numpy()
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)

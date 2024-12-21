@@ -117,7 +117,8 @@ def train(env: gym.Env, config: TrainConfig):
         total_reward = 0
         prev_action = None
         while not done:
-            action = cem_agent(obs=obs, prev_action=prev_action)
+            actions = cem_agent(obs=obs, prev_action=prev_action)
+            action = actions[0]
             action += np.random.normal(
                 0,
                 np.sqrt(config.action_noise_var),
@@ -250,7 +251,8 @@ def train(env: gym.Env, config: TrainConfig):
             cem_agent.reset()
             prev_action = None
             while not done:
-                action = cem_agent(obs=obs, prev_action=prev_action)
+                actions = cem_agent(obs=obs, prev_action=prev_action)
+                action = actions[0]
                 next_obs, reward, terminated, truncated, _ = env.step(action)
                 total_reward += reward
                 obs = next_obs
