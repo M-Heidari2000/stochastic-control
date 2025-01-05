@@ -17,24 +17,22 @@ class Linear(gym.Env):
         R,
         Ns=None,
         No=None,
-        action_lo: float=-1.0,
-        action_hi: float=1.0,
         render_mode: str=None,
         horizon: int= 1000,
     ):
         # Verify parameters' shapes
-        assert A.shape == (2, 2)
+        assert A.shape == (1, 1)
         self.A = A.astype(np.float32)
 
-        assert b.shape == (2, )
+        assert b.shape == (1, )
         # Convert to column vector
         self.b = b.astype(np.float32).reshape(-1, 1)
 
-        assert B.shape[0] == 2
+        assert B.shape[0] == 1
         self.action_dim = B.shape[1]
         self.B = B.astype(np.float32)
         
-        assert Q.shape == (2, 2)
+        assert Q.shape == (1, 1)
         self.Q = Q.astype(np.float32)
         assert R.shape == (self.action_dim, self.action_dim)
         self.R = R.astype(np.float32)
@@ -42,10 +40,10 @@ class Linear(gym.Env):
         self.Ns = Ns
         self.No = No
         if Ns is not None:
-            assert Ns.shape == (2, 2)
+            assert Ns.shape == (1, 1)
             self.Ns = Ns.astype(np.float32)
         if No is not None:
-            assert No.shape == (2, 2)
+            assert No.shape == (1, 1)
             self.No = No.astype(np.float32)
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -54,15 +52,15 @@ class Linear(gym.Env):
         self.horizon = horizon
 
         self.state_space = spaces.Box(
-            low=np.array([-4.0, -4.0]),
-            high=np.array([4.0, 4.0]),
-            shape=(2, ),
+            low=-4.0,
+            high=4.0,
+            shape=(1, ),
             dtype=np.float32,
         )
 
         self.action_space = spaces.Box(
-            low=action_lo,
-            high=action_hi,
+            low=-1.0,
+            high=1.0,
             shape=(self.action_dim, ),
             dtype=np.float32,
         )
@@ -70,14 +68,14 @@ class Linear(gym.Env):
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(2, ),
+            shape=(1, ),
             dtype=np.float32,
         )
 
         self.target = (0.5 * (self.state_space.low + self.state_space.high)).reshape(-1, 1)
 
     def manifold(self, s):
-        assert s.shape[0] == 2
+        assert s.shape[0] == 1
         return s
 
     def _get_obs(self):
