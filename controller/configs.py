@@ -21,6 +21,7 @@ class TrainConfig:
     clip_grad_norm: int = 1000
     free_nats: int = 0
     kl_beta: float = 1
+    planning_method: str = "cem"
     planning_horizon: int = 12
     num_iterations: int = 10
     num_candidates: int = 1000

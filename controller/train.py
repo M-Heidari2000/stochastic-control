@@ -11,7 +11,7 @@ from torch.distributions.kl import kl_divergence
 from torch.nn.functional import mse_loss
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard.writer import SummaryWriter
-from .agent import CEMAgent
+from .agent import CEMAgent, RSAgent
 from .memory import ReplayBuffer
 from .wrappers import RepeatActionWrapper
 from .configs import TrainConfig
@@ -83,15 +83,24 @@ def train(env: gym.Env, config: TrainConfig):
         list(posterior_model.parameters())
     )
 
-    cem_agent = CEMAgent(
-        transition_model=transition_model,
-        posterior_model=posterior_model,
-        reward_model=reward_model,
-        planning_horizon=config.planning_horizon,
-        num_iterations=config.num_iterations,
-        num_candidates=config.num_candidates,
-        num_elites=config.num_elites,
-    )
+    if config.planning_method == "cem":
+        agent = CEMAgent(
+            transition_model=transition_model,
+            posterior_model=posterior_model,
+            reward_model=reward_model,
+            planning_horizon=config.planning_horizon,
+            num_iterations=config.num_iterations,
+            num_candidates=config.num_candidates,
+            num_elites=config.num_elites,
+        )
+    elif config.planning_method == "rs":
+        agent = RSAgent(
+            transition_model=transition_model,
+            posterior_model=posterior_model,
+            reward_model=reward_model,
+            planning_horizon=12,
+            num_candidates=config.num_candidates
+        )
 
     optimizer = torch.optim.Adam(all_params, lr=config.lr, eps=config.eps)
 
@@ -112,12 +121,12 @@ def train(env: gym.Env, config: TrainConfig):
         # collect experience
         start = time.time()
         obs, _ = env.reset()
-        cem_agent.reset()
+        agent.reset()
         done = False
         total_reward = 0
         prev_action = None
         while not done:
-            actions = cem_agent(obs=obs, prev_action=prev_action)
+            actions = agent(obs=obs, prev_action=prev_action)
             action = actions[0]
             action += np.random.normal(
                 0,
@@ -248,10 +257,10 @@ def train(env: gym.Env, config: TrainConfig):
             obs, _ = env.reset()
             done = False
             total_reward = 0
-            cem_agent.reset()
+            agent.reset()
             prev_action = None
             while not done:
-                actions = cem_agent(obs=obs, prev_action=prev_action)
+                actions = agent(obs=obs, prev_action=prev_action)
                 action = actions[0]
                 next_obs, reward, terminated, truncated, _ = env.step(action)
                 total_reward += reward
