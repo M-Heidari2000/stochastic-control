@@ -133,6 +133,7 @@ def train(env: gym.Env, config: TrainConfig):
                 np.sqrt(config.action_noise_var),
                 env.action_space.shape[0],
             )
+            action.clip(min=env.action_space.low, max=env.action_space.high)
             next_obs, reward, terminated, truncated, _ = env.step(action)
             total_reward += reward
             done = terminated or truncated
