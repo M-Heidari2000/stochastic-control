@@ -12,6 +12,7 @@ class CEMAgent:
         transition_model,
         posterior_model,
         reward_model,
+        observation_model,
         planning_horizon: int,
         num_iterations: int,
         num_candidates: int,
@@ -20,6 +21,7 @@ class CEMAgent:
         self.transition_model = transition_model
         self.posterior_model = posterior_model
         self.reward_model = reward_model
+        self.observation_model = observation_model
         self.num_iterations = num_iterations
         self.num_candidates = num_candidates
         self.num_elites = num_elites
@@ -63,9 +65,14 @@ class CEMAgent:
 
                 state = state_posterior.sample([self.num_candidates]).squeeze(-2)
                 total_predicted_reward = torch.zeros(self.num_candidates, device=self.device)
+                observation_trajectories = torch.zeros(
+                    (self.planning_horizon, self.num_candidates, obs.shape[1]),
+                    device=self.device,
+                )
 
                 # start generating trajectories starting from s_t using transition model
                 for t in range(self.planning_horizon):
+                    observation_trajectories[t] = self.observation_model(state=state)
                     total_predicted_reward += self.reward_model(state=state).squeeze()
                     # get next state from our prior (transition model)
                     next_state_prior = self.transition_model(
@@ -86,8 +93,9 @@ class CEMAgent:
             
             # return only mean of the first action (MPC)
             actions = torch.tanh(mean)
+            best_trajectory = observation_trajectories[:, elite_indexes, :].mean(dim=1)
 
-        return actions.cpu().numpy()
+        return actions.cpu().numpy(), best_trajectory
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
@@ -102,12 +110,14 @@ class RSAgent:
         transition_model,
         posterior_model,
         reward_model,
+        observation_model,
         planning_horizon: int,
         num_candidates: int,
     ):
         self.transition_model = transition_model
         self.posterior_model = posterior_model
         self.reward_model = reward_model
+        self.observation_model = observation_model
         self.num_candidates = num_candidates
         self.planning_horizon = planning_horizon
 
@@ -144,9 +154,14 @@ class RSAgent:
 
             state = state_posterior.sample([self.num_candidates]).squeeze(-2)
             total_predicted_reward = torch.zeros(self.num_candidates, device=self.device)
+            observation_trajectories = torch.zeros(
+                (self.planning_horizon, self.num_candidates, obs.shape[1]),
+                device=self.device,
+            )
 
             # start generating trajectories starting from s_t using transition model
             for t in range(self.planning_horizon):
+                observation_trajectories[t] = self.observation_model(state=state)
                 total_predicted_reward += self.reward_model(state=state).squeeze()
                 # get next state from our prior (transition model)
                 next_state_prior = self.transition_model(
@@ -158,8 +173,9 @@ class RSAgent:
             # find the best action sequence
             max_index = total_predicted_reward.argmax()
             actions = action_candidates[:, max_index, :]
+            best_trajectory = observation_trajectories[:, max_index, :]
 
-        return actions.cpu().numpy()
+        return actions.cpu().numpy(), best_trajectory
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
