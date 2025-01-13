@@ -214,6 +214,8 @@ def train(env: gym.Env, config: TrainConfig):
                 rnn_hiddens[t] = rnn_hidden
                 posterior_samples[t] = posterior_sample
 
+            total_kl_loss /= config.chunk_length
+
             flatten_posterior_samples = posterior_samples.reshape(-1, config.state_dim)
             
             recon_observations = observation_model(
