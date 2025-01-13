@@ -95,7 +95,7 @@ class CEMAgent:
             actions = torch.tanh(mean)
             best_trajectory = observation_trajectories[:, elite_indexes, :].mean(dim=1)
 
-        return actions.cpu().numpy(), best_trajectory
+        return actions.cpu().numpy(), best_trajectory.cpu().numpy()
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
@@ -175,7 +175,7 @@ class RSAgent:
             actions = action_candidates[:, max_index, :]
             best_trajectory = observation_trajectories[:, max_index, :]
 
-        return actions.cpu().numpy(), best_trajectory
+        return actions.cpu().numpy(), best_trajectory.cpu().numpy()
     
     def reset(self):
         self.rnn_hidden = torch.zeros(1, self.posterior_model.rnn_hidden_dim, device=self.device)
