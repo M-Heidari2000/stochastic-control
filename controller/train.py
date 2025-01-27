@@ -88,6 +88,7 @@ def train(env: gym.Env, config: TrainConfig):
             transition_model=transition_model,
             posterior_model=posterior_model,
             reward_model=reward_model,
+            observation_model=observation_model,
             planning_horizon=config.planning_horizon,
             num_iterations=config.num_iterations,
             num_candidates=config.num_candidates,
@@ -98,7 +99,8 @@ def train(env: gym.Env, config: TrainConfig):
             transition_model=transition_model,
             posterior_model=posterior_model,
             reward_model=reward_model,
-            planning_horizon=12,
+            observation_model=observation_model,
+            planning_horizon=config.planning_horizon,
             num_candidates=config.num_candidates
         )
 
@@ -126,14 +128,14 @@ def train(env: gym.Env, config: TrainConfig):
         total_reward = 0
         prev_action = None
         while not done:
-            actions = agent(obs=obs, prev_action=prev_action)
+            actions, _ = agent(obs=obs, prev_action=prev_action)
             action = actions[0]
             action += np.random.normal(
                 0,
                 np.sqrt(config.action_noise_var),
                 env.action_space.shape[0],
             )
-            action.clip(min=env.action_space.low, max=env.action_space.high)
+            action = action.clip(min=-1.0, max=1.0)
             next_obs, reward, terminated, truncated, _ = env.step(action)
             total_reward += reward
             done = terminated or truncated
@@ -212,6 +214,8 @@ def train(env: gym.Env, config: TrainConfig):
                 rnn_hiddens[t] = rnn_hidden
                 posterior_samples[t] = posterior_sample
 
+            total_kl_loss /= config.chunk_length
+
             flatten_posterior_samples = posterior_samples.reshape(-1, config.state_dim)
             
             recon_observations = observation_model(
@@ -261,7 +265,7 @@ def train(env: gym.Env, config: TrainConfig):
             agent.reset()
             prev_action = None
             while not done:
-                actions = agent(obs=obs, prev_action=prev_action)
+                actions, _ = agent(obs=obs, prev_action=prev_action)
                 action = actions[0]
                 next_obs, reward, terminated, truncated, _ = env.step(action)
                 total_reward += reward
